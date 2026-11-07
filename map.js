@@ -116,8 +116,15 @@ async function loadStations() {
 }
 
 mapboxgl.accessToken = MAPBOX_TOKEN;
-const map = new mapboxgl.Map(MAP_OPTIONS);
-map.addControl(new mapboxgl.NavigationControl({ showCompass: false }));
+// The constructor throws at once where WebGL is unavailable; report that like
+// any other load failure. Every later use is guarded by `map?.`.
+let map = null;
+try {
+  map = new mapboxgl.Map(MAP_OPTIONS);
+  map.addControl(new mapboxgl.NavigationControl({ showCompass: false }));
+} catch (error) {
+  showLoadError(error);
+}
 
 // Step 3.3: project a station's longitude and latitude to map pixels. Handles
 // pan, zoom and rotation.
@@ -135,7 +142,7 @@ const LANE_URLS = { boston_route: DATA_URLS.bostonLanes, cambridge_route: DATA_U
 const laneAttempts = { boston_route: 1, cambridge_route: 1 };
 let mapLoaded = false;
 
-map.on('error', (event) => {
+map?.on('error', (event) => {
   const laneUrl = LANE_URLS[event.sourceId];
   if (laneUrl) {
     const attempt = laneAttempts[event.sourceId];
@@ -151,8 +158,9 @@ map.on('error', (event) => {
   if (!mapLoaded) showLoadError(event.error);
 });
 
-map.on('load', async () => {
-  mapLoaded = true;
+// Everything after the map loads. Any throw in here, expected or not, is
+// reported with the load-error message rather than leaving a half-built map.
+async function setUpMap() {
   // Steps 2.1 to 2.3: bike lanes from both cities.
   map.addSource('boston_route', { type: 'geojson', data: DATA_URLS.bostonLanes });
   map.addLayer({
@@ -409,6 +417,11 @@ map.on('load', async () => {
   // failed load above returns early and leaves it disabled.
   timeSlider.disabled = false;
   document.documentElement.dataset.ready = 'true';
+}
+
+map?.on('load', () => {
+  mapLoaded = true;
+  setUpMap().catch(showLoadError);
 });
 
 // Machine-readable value for <time datetime>, e.g. "08:30". 1440 is midnight.

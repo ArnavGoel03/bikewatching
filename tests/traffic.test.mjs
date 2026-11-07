@@ -176,6 +176,10 @@ test('validateStations rejects wrong shapes, duplicates and bad coordinates', ()
   assert.throws(() => validateStations({ data: { stations: [{ short_name: 'A', lon: 1, lat: 1 }, { short_name: 'A', lon: 1, lat: 1 }] } }), /duplicate/);
   assert.throws(() => validateStations({ data: { stations: [{ lon: 1, lat: 1 }] } }), /short_name/);
   assert.throws(() => validateStations({ data: { stations: [{ short_name: 'A', lon: 'x', lat: 1 }] } }), /coordinates/);
+  for (const [lon, lat] of [[null, 42], [-71, null], ['', 42], [-71, '  '], [-71, 91], [-181, 42], [undefined, 42], [-71, Infinity]]) {
+    assert.throws(() => validateStations({ data: { stations: [{ short_name: 'A', lon, lat }] } }), /coordinates/, `${lon},${lat}`);
+  }
+  assert.equal(validateStations({ data: { stations: [{ short_name: 'A', lon: -180, lat: 90 }] } }).length, 1);
 });
 
 test('validateTrips rejects empty, HTML and column-less bodies', () => {

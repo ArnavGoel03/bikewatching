@@ -123,6 +123,17 @@ export function tooltipText(station) {
 // like a failed download, instead of drawing a map of zeros.
 export const TRIP_COLUMNS = ['started_at', 'ended_at', 'start_station_id', 'end_station_id'];
 
+// A coordinate is a finite number or a numeric string; null, blank and
+// non-numeric values are rejected (Number() would turn null and '' into 0).
+function coordinate(value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
 export function validateStations(json) {
   const stations = json?.data?.stations;
   if (!Array.isArray(stations) || stations.length === 0) {
@@ -134,7 +145,9 @@ export function validateStations(json) {
     if (typeof id !== 'string' || id === '' || ids.has(id)) {
       throw new Error(`Station data has a missing or duplicate short_name: ${id}`);
     }
-    if (!Number.isFinite(+station.lon) || !Number.isFinite(+station.lat)) {
+    const lon = coordinate(station.lon);
+    const lat = coordinate(station.lat);
+    if (lon === null || lat === null || Math.abs(lon) > 180 || Math.abs(lat) > 90) {
       throw new Error(`Station ${id} has no usable coordinates`);
     }
     ids.add(id);

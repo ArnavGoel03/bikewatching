@@ -344,6 +344,8 @@ try {
     ['empty trips file', '**/bluebikes-traffic-2024-03.csv', '', 'text/csv'],
     ['HTML instead of trips CSV', '**/bluebikes-traffic-2024-03.csv', '<!DOCTYPE html><html><body>Service unavailable</body></html>', 'text/html'],
     ['stations JSON without stations', '**/bluebikes-stations.json', '{}', 'application/json'],
+    ['a station with null coordinates', '**/bluebikes-stations.json', JSON.stringify({ data: { stations: [{ short_name: 'A1', lon: null, lat: null }] } }), 'application/json'],
+    ['a station at latitude 91', '**/bluebikes-stations.json', JSON.stringify({ data: { stations: [{ short_name: 'A1', lon: -71.1, lat: 91 }] } }), 'application/json'],
   ];
   // Failures outside the data files: a CDN module, the Mapbox style (token
   // rejected), a bike-lane file that never comes back.
@@ -360,6 +362,21 @@ try {
     check(`${name}: load error shown`, shown);
     await failing.close();
   }
+
+  // No WebGL: the Mapbox constructor throws at once; the page must say so.
+  const noGl = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  await noGl.addInitScript(() => {
+    const original = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (type, ...rest) {
+      return /webgl/i.test(type) ? null : original.call(this, type, ...rest);
+    };
+  });
+  const noGlErrors = [];
+  noGl.on('pageerror', (e) => noGlErrors.push(String(e)));
+  await noGl.goto(base, { waitUntil: 'domcontentloaded' });
+  const noGlShown = await noGl.waitForSelector('#load-error:not([hidden])', { timeout: LOAD_TIMEOUT_MS }).then(() => true, () => false);
+  check('no WebGL: load error shown, no uncaught error', noGlShown && noGlErrors.length === 0, noGlErrors.join(' | '));
+  await noGl.close();
 
   // One failed lane response is retried and the lanes still arrive.
   const laneRetry = await browser.newPage({ viewport: { width: 1280, height: 800 } });
