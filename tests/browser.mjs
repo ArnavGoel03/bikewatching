@@ -203,6 +203,37 @@ try {
 
   check('no page or console errors', errors.length === 0, errors.join(' | '));
 
+  // Touch: a tap on a station keeps its tooltip open; a tap on bare map closes
+  // it and restores every <title>.
+  const touchContext = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  const touch = await touchContext.newPage();
+  await touch.goto(base, { waitUntil: 'domcontentloaded' });
+  await touch.waitForSelector('html[data-ready="true"]', { timeout: LOAD_TIMEOUT_MS });
+  const spots = await touch.evaluate(() => {
+    const inView = (b) => b.left > 10 && b.right < innerWidth - 10 && b.top > 0 && b.bottom < innerHeight;
+    const c = [...document.querySelectorAll('#map svg circle')].find((x) => Number(x.getAttribute('r')) > 6 && inView(x.getBoundingClientRect()));
+    const b = c.getBoundingClientRect();
+    let bare = null;
+    for (let y = innerHeight - 60; y > 0 && !bare; y -= 9) {
+      for (let x = 20; x < innerWidth - 20; x += 9) {
+        if (document.elementFromPoint(x, y)?.tagName === 'CANVAS') { bare = { x, y }; break; }
+      }
+    }
+    return { station: { x: b.x + b.width / 2, y: b.y + b.height / 2, title: c.querySelector('title').textContent }, bare };
+  });
+  await touch.touchscreen.tap(spots.station.x, spots.station.y);
+  await touch.waitForTimeout(200);
+  const tapped = await touch.evaluate(() => ({ hidden: document.getElementById('tooltip').hidden, text: document.getElementById('tooltip').textContent }));
+  check('tap on a station shows its tooltip', !tapped.hidden && tapped.text === spots.station.title, JSON.stringify(tapped));
+  await touch.touchscreen.tap(spots.bare.x, spots.bare.y);
+  await touch.waitForTimeout(200);
+  const closed = await touch.evaluate(() => ({
+    hidden: document.getElementById('tooltip').hidden,
+    blank: [...document.querySelectorAll('#map svg circle title')].filter((t) => t.textContent === '').length,
+  }));
+  check('tap on bare map closes it and restores titles', closed.hidden && closed.blank === 0, JSON.stringify(closed));
+  await touchContext.close();
+
   // A transient failure of the course server is retried: the first trips
   // request returns 503 and the map must still fill with the right numbers.
   const flaky = await browser.newPage({ viewport: { width: 1280, height: 800 } });

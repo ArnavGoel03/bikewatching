@@ -192,20 +192,36 @@ map.on('load', async () => {
     tooltip.style.top = `${Math.max(0, y)}px`;
   }
 
+  function hideTooltip() {
+    if (!hovered) return;
+    hovered.querySelector('title').textContent = tooltipText(d3.select(hovered).datum());
+    hovered = null;
+    tooltip.hidden = true;
+  }
+
+  function showTooltip(circle, event) {
+    if (hovered !== circle) hideTooltip();
+    hovered = circle;
+    circle.querySelector('title').textContent = '';
+    tooltip.textContent = tooltipText(d3.select(circle).datum());
+    tooltip.hidden = false;
+    placeTooltip(event);
+  }
+
   circles
-    .on('pointerenter', function (event, d) {
-      hovered = this;
-      this.querySelector('title').textContent = '';
-      tooltip.textContent = tooltipText(d);
-      tooltip.hidden = false;
-      placeTooltip(event);
+    .on('pointerenter', function (event) {
+      showTooltip(this, event);
     })
     .on('pointermove', placeTooltip)
-    .on('pointerleave', function (event, d) {
-      hovered = null;
-      this.querySelector('title').textContent = tooltipText(d);
-      tooltip.hidden = true;
+    .on('pointerleave', (event) => {
+      // A tap ends with pointerleave; keep its tooltip until the next tap elsewhere.
+      if (event.pointerType !== 'touch') hideTooltip();
     });
+
+  // Touch: a tap on anything that is not a station closes the open tooltip.
+  document.addEventListener('pointerdown', (event) => {
+    if (event.pointerType === 'touch' && !event.target.closest?.('#map circle')) hideTooltip();
+  });
 
   // Big circles first, so small stations stay on top and can be hovered.
   function sortBySize() {
@@ -247,9 +263,8 @@ map.on('load', async () => {
 
     // Keep an open tooltip in step when the time changes under the pointer.
     if (hovered) {
-      const d = d3.select(hovered).datum();
       hovered.querySelector('title').textContent = '';
-      tooltip.textContent = tooltipText(d);
+      tooltip.textContent = tooltipText(d3.select(hovered).datum());
       // New text can change the box size, so re-place it at the pointer.
       if (lastPointer) placeTooltip(lastPointer);
     }
