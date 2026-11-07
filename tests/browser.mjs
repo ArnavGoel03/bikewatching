@@ -296,6 +296,29 @@ try {
   await down.screenshot({ path: join(OUT, 'load-error.png') });
   await down.close();
 
+  // A 200 with the wrong body must be treated like a failed download, not
+  // drawn as a map of zeros.
+  const badBodies = [
+    ['empty trips file', '**/bluebikes-traffic-2024-03.csv', '', 'text/csv'],
+    ['HTML instead of trips CSV', '**/bluebikes-traffic-2024-03.csv', '<!DOCTYPE html><html><body>Service unavailable</body></html>', 'text/html'],
+    ['stations JSON without stations', '**/bluebikes-stations.json', '{}', 'application/json'],
+  ];
+  for (const [name, pattern, body, contentType] of badBodies) {
+    const bad = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    const badErrors = [];
+    bad.on('pageerror', (e) => badErrors.push(String(e)));
+    await bad.route(pattern, (route) => route.fulfill({ status: 200, body, contentType }));
+    await bad.goto(base, { waitUntil: 'domcontentloaded' });
+    await bad.waitForSelector('#load-error:not([hidden])', { timeout: LOAD_TIMEOUT_MS });
+    const state = await bad.evaluate(() => ({
+      slider: document.getElementById('time-slider').disabled,
+      circles: document.querySelectorAll('#map svg circle').length,
+      ready: document.documentElement.dataset.ready ?? null,
+    }));
+    check(`200 with ${name} shows the load error`, state.slider && state.circles === 0 && state.ready === null && badErrors.length === 0, JSON.stringify({ ...state, badErrors }));
+    await bad.close();
+  }
+
   // Smallest phone with 200% text: an open tooltip must wrap and stay on screen.
   await page.setViewportSize({ width: 320, height: 700 });
   await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });

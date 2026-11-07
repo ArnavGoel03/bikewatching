@@ -17,6 +17,8 @@ import {
   minutesSinceMidnight,
   parseTripTime,
   tooltipText,
+  validateStations,
+  validateTrips,
 } from '../traffic.js';
 
 const STATIONS_URL = 'https://dsc106.com/labs/lab07/data/bluebikes-stations.json';
@@ -163,4 +165,25 @@ test('real March 2024 data matches the independent reference', async () => {
     assert.equal(d3.sum(result, (s) => s.totalTraffic), sum, `sum at ${t}`);
     assert.equal(result.filter((s) => s.totalTraffic === 0).length, zero, `zero stations at ${t}`);
   }
+});
+
+test('validateStations rejects wrong shapes, duplicates and bad coordinates', () => {
+  const good = { data: { stations: [{ short_name: 'A', lon: -71.1, lat: 42.3 }, { short_name: 'B', lon: '-71.2', lat: '42.4' }] } };
+  assert.equal(validateStations(good).length, 2);
+  assert.throws(() => validateStations({}), /no data.stations/);
+  assert.throws(() => validateStations({ data: { stations: [] } }), /no data.stations/);
+  assert.throws(() => validateStations(null), /no data.stations/);
+  assert.throws(() => validateStations({ data: { stations: [{ short_name: 'A', lon: 1, lat: 1 }, { short_name: 'A', lon: 1, lat: 1 }] } }), /duplicate/);
+  assert.throws(() => validateStations({ data: { stations: [{ lon: 1, lat: 1 }] } }), /short_name/);
+  assert.throws(() => validateStations({ data: { stations: [{ short_name: 'A', lon: 'x', lat: 1 }] } }), /coordinates/);
+});
+
+test('validateTrips rejects empty, HTML and column-less bodies', () => {
+  const parse = (text) => d3.csvParse(text, (t) => ({ ...t, started_at: parseTripTime(t.started_at), ended_at: parseTripTime(t.ended_at) }));
+  const header = 'ride_id,bike_type,started_at,ended_at,start_station_id,end_station_id,is_member';
+  assert.equal(validateTrips(parse(`${header}\n1,classic,2024-03-01 08:00:00,2024-03-01 08:10:00,A,B,1`)).length, 1);
+  assert.throws(() => validateTrips(parse('')), /missing columns/);
+  assert.throws(() => validateTrips(parse('<!DOCTYPE html><html><body>Service unavailable</body></html>')), /missing columns/);
+  assert.throws(() => validateTrips(parse(header)), /no rows/);
+  assert.throws(() => validateTrips(parse(`${header}\n1,classic,soon,later,A,B,1`)), /no rows/);
 });

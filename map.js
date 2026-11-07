@@ -12,6 +12,8 @@ import {
   MINUTES_PER_DAY,
   parseTripTime,
   tooltipText,
+  validateStations,
+  validateTrips,
 } from './traffic.js';
 
 // Step 1.1: confirm Mapbox GL JS loaded.
@@ -88,14 +90,19 @@ async function withRetry(load, label) {
 
 // Trips are bucketed while parsing, so every attempt starts from empty buckets;
 // a retry after a partial parse can never double count.
-function loadTrips() {
+async function loadTrips() {
   for (const bucket of [...departuresByMinute, ...arrivalsByMinute]) bucket.length = 0;
-  return d3.csv(DATA_URLS.trips, (trip) => {
+  const trips = await d3.csv(DATA_URLS.trips, (trip) => {
     trip.started_at = parseTripTime(trip.started_at);
     trip.ended_at = parseTripTime(trip.ended_at);
     bucketTrip(trip, departuresByMinute, arrivalsByMinute);
     return trip;
   });
+  return validateTrips(trips);
+}
+
+async function loadStations() {
+  return validateStations(await d3.json(DATA_URLS.stations));
 }
 
 mapboxgl.accessToken = MAPBOX_TOKEN;
@@ -130,11 +137,11 @@ map.on('load', async () => {
 
   // Steps 3.1 and 4.1: stations and trips, fetched in parallel. Trip times are
   // parsed and bucketed by minute as each row loads (Steps 5.3 and 5.4).
-  let jsonData;
+  let loadedStations;
   let trips;
   try {
-    [jsonData, trips] = await Promise.all([
-      withRetry(() => d3.json(DATA_URLS.stations), 'stations'),
+    [loadedStations, trips] = await Promise.all([
+      withRetry(loadStations, 'stations'),
       withRetry(loadTrips, 'trips'),
     ]);
   } catch (error) {
@@ -144,11 +151,11 @@ map.on('load', async () => {
     document.getElementById('load-error').hidden = false;
     return;
   }
-  console.log('Loaded JSON Data:', jsonData);
+  console.log('Loaded stations:', loadedStations.length);
   console.log('Loaded trips:', trips.length);
 
   // Step 4.2: traffic per station over the whole day.
-  const stations = computeStationTraffic(jsonData.data.stations, ANY_TIME, tripBuckets);
+  const stations = computeStationTraffic(loadedStations, ANY_TIME, tripBuckets);
   console.log('Stations Array:', stations);
 
   // Step 4.3: area, not radius, encodes traffic.

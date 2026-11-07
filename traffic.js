@@ -116,3 +116,38 @@ export function departureRatio(station) {
 export function tooltipText(station) {
   return `${station.totalTraffic} trips (${station.departures} departures, ${station.arrivals} arrivals)`;
 }
+
+// Data validation. A server can answer 200 with the wrong body (an HTML error
+// page, an empty file, a different JSON shape). These checks run inside the
+// load-and-retry path, so bad content is retried and then reported exactly
+// like a failed download, instead of drawing a map of zeros.
+export const TRIP_COLUMNS = ['started_at', 'ended_at', 'start_station_id', 'end_station_id'];
+
+export function validateStations(json) {
+  const stations = json?.data?.stations;
+  if (!Array.isArray(stations) || stations.length === 0) {
+    throw new Error('Station data has no data.stations list');
+  }
+  const ids = new Set();
+  for (const station of stations) {
+    const id = station?.short_name;
+    if (typeof id !== 'string' || id === '' || ids.has(id)) {
+      throw new Error(`Station data has a missing or duplicate short_name: ${id}`);
+    }
+    if (!Number.isFinite(+station.lon) || !Number.isFinite(+station.lat)) {
+      throw new Error(`Station ${id} has no usable coordinates`);
+    }
+    ids.add(id);
+  }
+  return stations;
+}
+
+export function validateTrips(trips) {
+  const missing = TRIP_COLUMNS.filter((column) => !trips?.columns?.includes(column));
+  if (missing.length > 0) throw new Error(`Trip data is missing columns: ${missing.join(', ')}`);
+  const usable = trips.filter(
+    (trip) => Number.isFinite(trip.started_at?.getTime()) && Number.isFinite(trip.ended_at?.getTime()),
+  );
+  if (usable.length === 0) throw new Error('Trip data has no rows with valid times');
+  return trips;
+}
