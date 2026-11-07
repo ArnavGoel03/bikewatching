@@ -175,8 +175,10 @@ map.on('load', async () => {
   const tooltip = document.getElementById('tooltip');
   const TOOLTIP_OFFSET_PX = 14;
   let hovered = null;
+  let lastPointer = null;
 
   function placeTooltip(event) {
+    lastPointer = event;
     const { innerWidth, innerHeight } = window;
     const { width, height } = tooltip.getBoundingClientRect();
     // Flip to the other side of the pointer near the right or bottom edge.
@@ -248,6 +250,8 @@ map.on('load', async () => {
       const d = d3.select(hovered).datum();
       hovered.querySelector('title').textContent = '';
       tooltip.textContent = tooltipText(d);
+      // New text can change the box size, so re-place it at the pointer.
+      if (lastPointer) placeTooltip(lastPointer);
     }
 
     sortBySize();

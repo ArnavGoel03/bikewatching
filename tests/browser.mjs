@@ -217,6 +217,30 @@ try {
   check('a 503 on the trips file is retried', tripRequests === 2 && flakyBusiest === '11174 trips (5614 departures, 5560 arrivals)', `${tripRequests} requests, ${flakyBusiest}`);
   await flaky.close();
 
+  // Smallest phone with 200% text: an open tooltip must wrap and stay on screen.
+  await page.setViewportSize({ width: 320, height: 700 });
+  await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+  await page.waitForTimeout(400);
+  await page.evaluate(() => document.getElementById('map').scrollIntoView({ block: 'start' }));
+  await page.waitForTimeout(300);
+  const small = await page.$$eval('#map svg circle', (cs) => {
+    const c = cs.find((x) => {
+      const b = x.getBoundingClientRect();
+      return Number(x.getAttribute('r')) > 4 && b.left > 40 && b.right < innerWidth - 40 && b.top > 0 && b.bottom < innerHeight;
+    });
+    const b = c.getBoundingClientRect();
+    return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+  });
+  await page.mouse.move(small.x, small.y);
+  await page.waitForTimeout(150);
+  const fit = await page.evaluate(() => {
+    const r = document.getElementById('tooltip').getBoundingClientRect();
+    return { left: r.left, right: r.right, width: r.width, vw: innerWidth, hidden: document.getElementById('tooltip').hidden, scroll: document.documentElement.scrollWidth - innerWidth };
+  });
+  check('tooltip fits a 320 px screen at 200% text', !fit.hidden && fit.left >= 0 && fit.right <= fit.vw && fit.scroll <= 0, JSON.stringify(fit));
+  await page.mouse.move(2, 2);
+  await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
+
   // Phone width: no horizontal scroll, map still visible.
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(500);
