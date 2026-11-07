@@ -139,6 +139,9 @@ map.on('load', async () => {
     ]);
   } catch (error) {
     console.error('Error loading Bluebikes data:', error);
+    // Every attempt failed: say so instead of leaving an empty map. The slider
+    // stays disabled.
+    document.getElementById('load-error').hidden = false;
     return;
   }
   console.log('Loaded JSON Data:', jsonData);

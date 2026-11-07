@@ -106,6 +106,7 @@ try {
   check('tooltip format', circles.every((c) => /^\d+ trips \(\d+ departures, \d+ arrivals\)$/.test(c.title)), circles[0].title);
   check('busiest station first-drawn (small on top)', circles[0].r === 25);
   check('(any time) shown at -1', await page.isVisible('#any-time'));
+  check('no load-error message on a good load', await page.isHidden('#load-error'));
   await page.screenshot({ path: join(OUT, 'desktop-any-time.png') });
 
   // Hover a mid-sized station: its native tooltip must be reachable.
@@ -246,7 +247,27 @@ try {
   await flaky.waitForSelector('html[data-ready="true"]', { timeout: LOAD_TIMEOUT_MS });
   const flakyBusiest = await flaky.$eval('#map svg circle title', (t) => t.textContent);
   check('a 503 on the trips file is retried', tripRequests === 2 && flakyBusiest === '11174 trips (5614 departures, 5560 arrivals)', `${tripRequests} requests, ${flakyBusiest}`);
+  check('no load-error message after a recovered 503', await flaky.isHidden('#load-error'));
   await flaky.close();
+
+  // A lasting outage: every trips request fails. The page must say so and keep
+  // the slider disabled instead of showing an empty map silently.
+  const down = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  let downRequests = 0;
+  await down.route('**/bluebikes-traffic-2024-03.csv', (route) => {
+    downRequests += 1;
+    return route.fulfill({ status: 503, body: 'unavailable' });
+  });
+  await down.goto(base, { waitUntil: 'domcontentloaded' });
+  await down.waitForSelector('#load-error:not([hidden])', { timeout: LOAD_TIMEOUT_MS });
+  const downState = await down.evaluate(() => ({
+    text: document.getElementById('load-error').textContent,
+    slider: document.getElementById('time-slider').disabled,
+    circles: document.querySelectorAll('#map svg circle').length,
+  }));
+  check('lasting outage shows the load error', downRequests === 3 && downState.slider && downState.circles === 0 && downState.text.startsWith("Couldn't load"), `${downRequests} requests, ${JSON.stringify(downState)}`);
+  await down.screenshot({ path: join(OUT, 'load-error.png') });
+  await down.close();
 
   // Smallest phone with 200% text: an open tooltip must wrap and stay on screen.
   await page.setViewportSize({ width: 320, height: 700 });

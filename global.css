@@ -8,6 +8,7 @@
   --color-departures: steelblue;
   --color-arrivals: darkorange;
   --color-station-stroke: white;
+  --color-error: #b42318;
   --radius-map: 8px;
   --radius-tooltip: 5px;
   --color-tooltip-bg: var(--color-text);
