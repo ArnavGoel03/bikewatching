@@ -166,6 +166,48 @@ try {
   check('arrow key moves to the next station', kb2.tip === kb2.title && kb2.title !== kb1.title && kb2.stops === 1 && kb2.blank === 0, JSON.stringify(kb2));
   await page.keyboard.press('Escape');
   check('Escape closes the station tooltip', await page.isHidden('#tooltip'));
+
+  // Every station the arrow keys reach is drawn (radius > 0) and inside the map.
+  await page.keyboard.press('Home');
+  let unseen = 0;
+  let zero = 0;
+  for (let i = 0; i < 120; i += 1) {
+    await page.keyboard.press('ArrowRight');
+    const where = await page.evaluate(() => {
+      const c = document.activeElement;
+      const b = c.getBoundingClientRect();
+      const f = document.getElementById('map').getBoundingClientRect();
+      const x = b.left + b.width / 2;
+      const y = b.top + b.height / 2;
+      return { r: Number(c.getAttribute('r')), inside: x >= f.left && x <= f.right && y >= f.top && y <= f.bottom };
+    });
+    if (!where.inside) unseen += 1;
+    if (where.r === 0) zero += 1;
+  }
+  await page.keyboard.press('End');
+  const endR = await page.evaluate(() => Number(document.activeElement.getAttribute('r')));
+  check('arrow keys only visit visible stations inside the map', unseen === 0 && zero === 0 && endR > 0, `${unseen} outside, ${zero} zero-size, End r=${endR}`);
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => document.activeElement.blur());
+  // Reset the view for the checks that follow.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('html[data-ready="true"]', { timeout: LOAD_TIMEOUT_MS });
+  await page.waitForLoadState('networkidle', { timeout: LOAD_TIMEOUT_MS });
+
+  // Hovering a station and then Tabbing onto the same station must leave its
+  // <title> (its accessible name) filled in.
+  const topStation = await page.$eval('#map svg circle', (c) => {
+    const b = c.getBoundingClientRect();
+    return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+  });
+  await page.mouse.move(topStation.x, topStation.y);
+  await page.focus('#time-slider');
+  await page.keyboard.press('Tab');
+  const mixed = await page.evaluate(() => document.activeElement.querySelector('title')?.textContent);
+  check('hover then Tab to the same station keeps its name', mixed === '11174 trips (5614 departures, 5560 arrivals)', mixed);
+  await page.keyboard.press('Escape');
+  await page.mouse.move(5, 5);
+  await page.evaluate(() => document.activeElement.blur());
   await page.keyboard.press('Tab');
   const kb3 = await page.evaluate(() => ({ tag: document.activeElement.tagName, hidden: document.getElementById('tooltip').hidden }));
   check('next Tab leaves the stations', kb3.tag !== 'circle' && kb3.hidden, JSON.stringify(kb3));
@@ -303,6 +345,35 @@ try {
     ['HTML instead of trips CSV', '**/bluebikes-traffic-2024-03.csv', '<!DOCTYPE html><html><body>Service unavailable</body></html>', 'text/html'],
     ['stations JSON without stations', '**/bluebikes-stations.json', '{}', 'application/json'],
   ];
+  // Failures outside the data files: a CDN module, the Mapbox style (token
+  // rejected), a bike-lane file that never comes back.
+  const failures = [
+    ['D3 module from the CDN fails', '**/d3@7.9.0/+esm', (route) => route.abort()],
+    ['Mapbox style rejected (401)', 'https://api.mapbox.com/styles/v1/**', (route) => route.fulfill({ status: 401, body: '{"message":"Not Authorized"}', contentType: 'application/json' })],
+    ['Boston lanes always 503', '**/boston-bike-network-2022.geojson', (route) => route.fulfill({ status: 503, body: 'unavailable' })],
+  ];
+  for (const [name, pattern, handler] of failures) {
+    const failing = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    await failing.route(pattern, handler);
+    await failing.goto(base, { waitUntil: 'domcontentloaded' });
+    const shown = await failing.waitForSelector('#load-error:not([hidden])', { timeout: LOAD_TIMEOUT_MS }).then(() => true, () => false);
+    check(`${name}: load error shown`, shown);
+    await failing.close();
+  }
+
+  // One failed lane response is retried and the lanes still arrive.
+  const laneRetry = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  let bostonRequests = 0;
+  await laneRetry.route('**/boston-bike-network-2022.geojson', (route) => {
+    bostonRequests += 1;
+    return bostonRequests === 1 ? route.fulfill({ status: 503, body: 'unavailable' }) : route.continue();
+  });
+  await laneRetry.goto(base, { waitUntil: 'domcontentloaded' });
+  await laneRetry.waitForSelector('html[data-ready="true"]', { timeout: LOAD_TIMEOUT_MS });
+  await laneRetry.waitForTimeout(4000);
+  check('a 503 on a lane file is retried', bostonRequests === 2 && (await laneRetry.isHidden('#load-error')), `${bostonRequests} requests`);
+  await laneRetry.close();
+
   for (const [name, pattern, body, contentType] of badBodies) {
     const bad = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     const badErrors = [];

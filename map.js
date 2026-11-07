@@ -75,6 +75,16 @@ const tripBuckets = { departuresByMinute, arrivalsByMinute };
 // load is given up, so one bad response does not leave the map empty.
 const DATA_LOAD_ATTEMPTS = 3;
 const DATA_RETRY_BASE_MS = 1500;
+// A stalled download is abandoned after this long and retried. Generous: the
+// trips file is about 6.5 MB compressed, about 50 s on a 1 Mbit/s link.
+const DATA_TIMEOUT_MS = 90_000;
+
+// One place that reports a load failure, with the owner-approved message in
+// index.html. The slider stays disabled.
+function showLoadError(error) {
+  console.error('Bikewatching could not load:', error);
+  document.getElementById('load-error').hidden = false;
+}
 
 async function withRetry(load, label) {
   for (let attempt = 1; ; attempt += 1) {
@@ -92,7 +102,7 @@ async function withRetry(load, label) {
 // a retry after a partial parse can never double count.
 async function loadTrips() {
   for (const bucket of [...departuresByMinute, ...arrivalsByMinute]) bucket.length = 0;
-  const trips = await d3.csv(DATA_URLS.trips, (trip) => {
+  const trips = await d3.csv(DATA_URLS.trips, { signal: AbortSignal.timeout(DATA_TIMEOUT_MS) }, (trip) => {
     trip.started_at = parseTripTime(trip.started_at);
     trip.ended_at = parseTripTime(trip.ended_at);
     bucketTrip(trip, departuresByMinute, arrivalsByMinute);
@@ -102,7 +112,7 @@ async function loadTrips() {
 }
 
 async function loadStations() {
-  return validateStations(await d3.json(DATA_URLS.stations));
+  return validateStations(await d3.json(DATA_URLS.stations, { signal: AbortSignal.timeout(DATA_TIMEOUT_MS) }));
 }
 
 mapboxgl.accessToken = MAPBOX_TOKEN;
@@ -117,7 +127,32 @@ function getCoords(station) {
   return { cx: x, cy: y };
 }
 
+// Map failures. Before 'load' (style or token rejected, e.g. a 401) the map
+// can never draw, so report it. After 'load', a failed bike-lane file is
+// retried like the data files and then reported; other errors (a single
+// tile, say) are left to Mapbox, which recovers on its own.
+const LANE_URLS = { boston_route: DATA_URLS.bostonLanes, cambridge_route: DATA_URLS.cambridgeLanes };
+const laneAttempts = { boston_route: 1, cambridge_route: 1 };
+let mapLoaded = false;
+
+map.on('error', (event) => {
+  const laneUrl = LANE_URLS[event.sourceId];
+  if (laneUrl) {
+    const attempt = laneAttempts[event.sourceId];
+    if (attempt >= DATA_LOAD_ATTEMPTS) {
+      showLoadError(event.error);
+      return;
+    }
+    laneAttempts[event.sourceId] = attempt + 1;
+    console.warn(`Retrying ${event.sourceId} (attempt ${attempt + 1} of ${DATA_LOAD_ATTEMPTS}):`, event.error);
+    setTimeout(() => map.getSource(event.sourceId)?.setData(laneUrl), DATA_RETRY_BASE_MS * attempt);
+    return;
+  }
+  if (!mapLoaded) showLoadError(event.error);
+});
+
 map.on('load', async () => {
+  mapLoaded = true;
   // Steps 2.1 to 2.3: bike lanes from both cities.
   map.addSource('boston_route', { type: 'geojson', data: DATA_URLS.bostonLanes });
   map.addLayer({
@@ -145,10 +180,8 @@ map.on('load', async () => {
       withRetry(loadTrips, 'trips'),
     ]);
   } catch (error) {
-    console.error('Error loading Bluebikes data:', error);
-    // Every attempt failed: say so instead of leaving an empty map. The slider
-    // stays disabled.
-    document.getElementById('load-error').hidden = false;
+    // Every attempt failed: say so instead of leaving an empty map.
+    showLoadError(error);
     return;
   }
   console.log('Loaded stations:', loadedStations.length);
@@ -219,10 +252,24 @@ map.on('load', async () => {
     if (hovered !== circle) hideTooltip();
     hovered = circle;
     titleBlanked = blankTitle;
-    if (blankTitle) circle.querySelector('title').textContent = '';
+    // Set the <title> both ways: focusing a circle that is also under the
+    // pointer must give it back its accessible name.
+    circle.querySelector('title').textContent = blankTitle ? '' : tooltipText(d3.select(circle).datum());
     tooltip.textContent = tooltipText(d3.select(circle).datum());
     tooltip.hidden = false;
     placeTooltip(point);
+  }
+
+  // Pan a keyboard-focused station into view if it sits outside the map.
+  function revealStation(circle) {
+    const box = circle.getBoundingClientRect();
+    const frame = map.getContainer().getBoundingClientRect();
+    const cx = box.left + box.width / 2;
+    const cy = box.top + box.height / 2;
+    if (cx < frame.left || cx > frame.right || cy < frame.top || cy > frame.bottom) {
+      const d = d3.select(circle).datum();
+      map.panTo([+d.lon, +d.lat], { duration: 0 });
+    }
   }
 
   function centerOf(circle) {
@@ -255,6 +302,7 @@ map.on('load', async () => {
 
   circles
     .on('focus', function () {
+      revealStation(this);
       showTooltip(this, centerOf(this), { blankTitle: false });
     })
     .on('blur', function () {
@@ -268,7 +316,11 @@ map.on('load', async () => {
       const step = STATION_KEYS[event.key];
       if (step === undefined) return;
       event.preventDefault();
-      const ordered = [...this.parentNode.querySelectorAll('circle')];
+      // Only stations drawn with some size: a zero-radius circle has no trips
+      // at this time and nothing visible to focus.
+      const ordered = [...this.parentNode.querySelectorAll('circle')].filter(
+        (c) => c === this || Number(c.getAttribute('r')) > 0,
+      );
       const index = ordered.indexOf(this);
       const nextIndex = step === 'first' ? 0
         : step === 'last' ? ordered.length - 1
