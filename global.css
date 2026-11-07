@@ -1,0 +1,30 @@
+/* Design tokens: the one place colours and sizes are defined. map.js reads
+   --color-bike-lane from here for the Mapbox layers. */
+:root {
+  color-scheme: light;
+  --color-text: #1f2328;
+  --color-muted: #6e7781;
+  --color-bike-lane: #2e9e44;
+  --color-departures: steelblue;
+  --color-arrivals: darkorange;
+  --color-station-stroke: white;
+  --radius-map: 8px;
+  --space-1: 0.25em;
+  --space-2: 0.5em;
+  --space-3: 1em;
+  --space-4: 2em;
+}
+
+/* Step 0.4 */
+body {
+  font: 100%/1.5 system-ui, sans-serif;
+  color: var(--color-text);
+  background: white;
+  display: flex;
+  flex-flow: column;
+  max-width: 80em;
+  min-height: 100vh;
+  box-sizing: border-box;
+  margin: auto;
+  padding: var(--space-3);
+}

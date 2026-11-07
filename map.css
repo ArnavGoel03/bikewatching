@@ -1,0 +1,117 @@
+/* Step 1.2, adapted: the page is a column of header, map and legend, and the
+   map takes the height that is left. */
+html,
+body {
+  height: 100%;
+}
+
+h1 {
+  margin: 0;
+}
+
+.description {
+  margin: 0;
+  max-width: 40em;
+  color: var(--color-muted);
+}
+
+/* Step 5.1: title on the left, time filter pushed to the right. */
+header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: baseline;
+  margin-block-end: var(--space-2);
+}
+
+header label {
+  margin-left: auto;
+}
+
+#time-slider {
+  width: 16em;
+  max-width: 100%;
+  vertical-align: middle;
+}
+
+/* Own line, so the changing time never shifts the slider. */
+header time,
+header em {
+  display: block;
+  min-height: 1.5em;
+  text-align: right;
+}
+
+header em {
+  color: var(--color-muted);
+  font-style: italic;
+}
+
+#map {
+  flex: 1;
+  min-height: 20em;
+  width: 100%;
+  border-radius: var(--radius-map);
+  box-shadow: 0 4px 8px rgb(0 0 0 / 10%);
+}
+
+/* Step 3.2: SVG overlay on top of the map canvas, letting drags through. */
+#map svg {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* Step 6: shared flow colour for station circles and legend swatches. */
+#map circle,
+.legend > div {
+  --color: color-mix(
+    in oklch,
+    var(--color-departures) calc(100% * var(--departure-ratio)),
+    var(--color-arrivals)
+  );
+}
+
+/* Steps 4.3, 4.4 and 6.1 */
+#map circle {
+  fill: var(--color);
+  fill-opacity: 0.6;
+  stroke: var(--color-station-stroke);
+  stroke-width: 1;
+  pointer-events: auto;
+}
+
+#map circle:hover {
+  fill-opacity: 0.9;
+}
+
+/* Step 6.2, design 2: separate swatches and labels. */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  margin-block: var(--space-3);
+}
+
+.legend-title {
+  color: var(--color-muted);
+}
+
+.legend > div {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.legend > div::before {
+  content: '';
+  width: 1em;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--color);
+  opacity: 0.8;
+}

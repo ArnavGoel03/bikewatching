@@ -1,0 +1,51 @@
+# Publishes the site to GitHub Pages. The Mapbox token lives only in the
+# MAPBOX_TOKEN repository secret and is substituted into map.js here, so it
+# never enters git history. Only the files the page needs are published.
+name: Deploy to Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Assemble site with the Mapbox token
+        env:
+          MAPBOX_TOKEN: ${{ secrets.MAPBOX_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$MAPBOX_TOKEN" =~ ^pk\.[A-Za-z0-9._-]+$ ]]; then
+            echo "MAPBOX_TOKEN secret is missing or not a public pk. token" >&2
+            exit 1
+          fi
+          mkdir _site
+          cp -R index.html global.css map.css map.js traffic.js assets _site/
+          sed -i "s|__MAPBOX_TOKEN__|${MAPBOX_TOKEN}|" _site/map.js
+          if grep -q "__MAPBOX_TOKEN__" _site/map.js; then
+            echo "token placeholder was not replaced" >&2
+            exit 1
+          fi
+
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v5
