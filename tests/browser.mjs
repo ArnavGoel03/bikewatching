@@ -144,6 +144,33 @@ try {
   }));
   check('tooltip hides and titles restore on leave', left.hidden && left.blank === 0, JSON.stringify(left));
 
+  // Keyboard: Tab from the slider lands on the busiest station and opens its
+  // tooltip; arrows move to the next station; Escape closes; the stations are
+  // one Tab stop, and every <title> keeps its text throughout.
+  await page.focus('#time-slider');
+  await page.keyboard.press('Tab');
+  const kb1 = await page.evaluate(() => ({
+    tag: document.activeElement.tagName,
+    title: document.activeElement.querySelector('title')?.textContent,
+    tip: document.getElementById('tooltip').hidden ? null : document.getElementById('tooltip').textContent,
+    stops: document.querySelectorAll('#map svg circle[tabindex="0"]').length,
+  }));
+  check('Tab reaches the busiest station and shows its tooltip', kb1.tag === 'circle' && kb1.tip === kb1.title && kb1.title === '11174 trips (5614 departures, 5560 arrivals)' && kb1.stops === 1, JSON.stringify(kb1));
+  await page.keyboard.press('ArrowRight');
+  const kb2 = await page.evaluate(() => ({
+    title: document.activeElement.querySelector('title')?.textContent,
+    tip: document.getElementById('tooltip').textContent,
+    stops: document.querySelectorAll('#map svg circle[tabindex="0"]').length,
+    blank: [...document.querySelectorAll('#map svg circle title')].filter((t) => t.textContent === '').length,
+  }));
+  check('arrow key moves to the next station', kb2.tip === kb2.title && kb2.title !== kb1.title && kb2.stops === 1 && kb2.blank === 0, JSON.stringify(kb2));
+  await page.keyboard.press('Escape');
+  check('Escape closes the station tooltip', await page.isHidden('#tooltip'));
+  await page.keyboard.press('Tab');
+  const kb3 = await page.evaluate(() => ({ tag: document.activeElement.tagName, hidden: document.getElementById('tooltip').hidden }));
+  check('next Tab leaves the stations', kb3.tag !== 'circle' && kb3.hidden, JSON.stringify(kb3));
+  await page.evaluate(() => document.activeElement.blur());
+
   // Pan: circles must follow the map.
   // Start the drag on bare map: a drag that starts on a circle goes to the SVG.
   const start = await page.evaluate(() => {

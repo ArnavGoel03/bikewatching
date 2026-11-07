@@ -94,6 +94,17 @@ header em {
   fill-opacity: 0.9;
 }
 
+/* Keyboard focus on a station: a dark ring that reads on light and dark fills. */
+#map circle:focus {
+  outline: none;
+}
+
+#map circle:focus-visible {
+  fill-opacity: 0.9;
+  stroke: var(--color-text);
+  stroke-width: 3;
+}
+
 /* Step 6.2, design 2: separate swatches and labels. */
 .legend {
   display: flex;

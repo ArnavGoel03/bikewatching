@@ -195,25 +195,37 @@ map.on('load', async () => {
     tooltip.style.top = `${Math.max(0, y)}px`;
   }
 
+  // The circle whose tooltip is open, and whether its <title> was blanked
+  // (pointer hover only; a focused circle keeps its <title> as its name for
+  // screen readers, and browsers show no native tooltip on focus).
+  let titleBlanked = false;
+
   function hideTooltip() {
     if (!hovered) return;
     hovered.querySelector('title').textContent = tooltipText(d3.select(hovered).datum());
     hovered = null;
+    titleBlanked = false;
     tooltip.hidden = true;
   }
 
-  function showTooltip(circle, event) {
+  function showTooltip(circle, point, { blankTitle }) {
     if (hovered !== circle) hideTooltip();
     hovered = circle;
-    circle.querySelector('title').textContent = '';
+    titleBlanked = blankTitle;
+    if (blankTitle) circle.querySelector('title').textContent = '';
     tooltip.textContent = tooltipText(d3.select(circle).datum());
     tooltip.hidden = false;
-    placeTooltip(event);
+    placeTooltip(point);
+  }
+
+  function centerOf(circle) {
+    const box = circle.getBoundingClientRect();
+    return { clientX: box.left + box.width / 2, clientY: box.top + box.height / 2 };
   }
 
   circles
     .on('pointerenter', function (event) {
-      showTooltip(this, event);
+      showTooltip(this, event, { blankTitle: true });
     })
     .on('pointermove', placeTooltip)
     .on('pointerleave', (event) => {
@@ -226,17 +238,55 @@ map.on('load', async () => {
     if (event.pointerType === 'touch' && !event.target.closest?.('#map circle')) hideTooltip();
   });
 
+  // Keyboard: the stations are one Tab stop (roving tabindex). Arrow keys step
+  // through them busiest first, Home and End jump to the ends, Escape closes
+  // the tooltip. A focused station shows the same tooltip at its centre.
+  const STATION_KEYS = {
+    ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1, Home: 'first', End: 'last',
+  };
+  circles.attr('tabindex', -1);
+
+  circles
+    .on('focus', function () {
+      showTooltip(this, centerOf(this), { blankTitle: false });
+    })
+    .on('blur', function () {
+      if (hovered === this) hideTooltip();
+    })
+    .on('keydown', function (event) {
+      if (event.key === 'Escape') {
+        hideTooltip();
+        return;
+      }
+      const step = STATION_KEYS[event.key];
+      if (step === undefined) return;
+      event.preventDefault();
+      const ordered = [...this.parentNode.querySelectorAll('circle')];
+      const index = ordered.indexOf(this);
+      const nextIndex = step === 'first' ? 0
+        : step === 'last' ? ordered.length - 1
+        : (index + step + ordered.length) % ordered.length;
+      const next = ordered[nextIndex];
+      this.setAttribute('tabindex', -1);
+      next.setAttribute('tabindex', 0);
+      next.focus();
+    });
+
   // Big circles first, so small stations stay on top and can be hovered.
   function sortBySize() {
     circles.sort((a, b) => d3.descending(a.totalTraffic, b.totalTraffic));
   }
   sortBySize();
+  // The Tab stop starts on the busiest station, first after sorting.
+  svg.select('circle').attr('tabindex', 0);
 
   // Step 3.3: keep circles aligned with the map.
   function updatePositions() {
     circles
       .attr('cx', (d) => getCoords(d).cx)
       .attr('cy', (d) => getCoords(d).cy);
+    // A focused station's tooltip follows it as the map moves.
+    if (hovered && hovered === document.activeElement) placeTooltip(centerOf(hovered));
   }
   updatePositions();
   map.on('move', updatePositions);
@@ -266,7 +316,7 @@ map.on('load', async () => {
 
     // Keep an open tooltip in step when the time changes under the pointer.
     if (hovered) {
-      hovered.querySelector('title').textContent = '';
+      if (titleBlanked) hovered.querySelector('title').textContent = '';
       tooltip.textContent = tooltipText(d3.select(hovered).datum());
       // New text can change the box size, so re-place it at the pointer.
       if (lastPointer) placeTooltip(lastPointer);
