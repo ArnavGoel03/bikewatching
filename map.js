@@ -200,9 +200,11 @@ async function setUpMap() {
   console.log('Stations Array:', stations);
 
   // Step 4.3: area, not radius, encodes traffic.
+  // The top of the domain is at least 1: with no trips at all, [0, 0] would
+  // make D3 draw every station at mid-size instead of zero.
   const radiusScale = d3
     .scaleSqrt()
-    .domain([0, d3.max(stations, (d) => d.totalTraffic)])
+    .domain([0, Math.max(1, d3.max(stations, (d) => d.totalTraffic) ?? 0)])
     .range(RADIUS_RANGE_ALL);
 
   // Steps 3.3, 4.3, 4.4 and 6.1: one circle per station, keyed by short_name.

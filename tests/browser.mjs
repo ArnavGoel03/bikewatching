@@ -391,6 +391,28 @@ try {
   check('a 503 on a lane file is retried', bostonRequests === 2 && (await laneRetry.isHidden('#load-error')), `${bostonRequests} requests`);
   await laneRetry.close();
 
+  // Valid files in which no trip touches a known station: every circle must
+  // have radius 0, not a mid-size default.
+  const noTraffic = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  await noTraffic.route('**/bluebikes-stations.json', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ data: { stations: [
+      { short_name: 'A', lon: -71.09, lat: 42.36 },
+      { short_name: 'B', lon: -71.06, lat: 42.35 },
+    ] } }),
+  }));
+  await noTraffic.route('**/bluebikes-traffic-2024-03.csv', (route) => route.fulfill({
+    status: 200,
+    contentType: 'text/csv',
+    body: 'ride_id,bike_type,started_at,ended_at,start_station_id,end_station_id,is_member\n1,classic,2024-03-01 08:00:00,2024-03-01 08:10:00,X,Y,1',
+  }));
+  await noTraffic.goto(base, { waitUntil: 'domcontentloaded' });
+  await noTraffic.waitForSelector('html[data-ready="true"]', { timeout: LOAD_TIMEOUT_MS });
+  const radii = await noTraffic.$$eval('#map svg circle', (cs) => cs.map((c) => Number(c.getAttribute('r'))));
+  check('stations with no trips are drawn at radius 0', radii.length === 2 && radii.every((r) => r === 0), JSON.stringify(radii));
+  await noTraffic.close();
+
   for (const [name, pattern, body, contentType] of badBodies) {
     const bad = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     const badErrors = [];
