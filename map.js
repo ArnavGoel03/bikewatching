@@ -142,6 +142,44 @@ map.on('load', async () => {
       d3.select(this).append('title').text(tooltipText(d));
     });
 
+  // Step 4.4, gone further: an on-page tooltip that appears instantly and
+  // follows the pointer. The native <title> pops up only after a delay and is
+  // often missing from screen recordings. Each circle keeps its <title> (the
+  // lab's tooltip, and an accessible name); it is blanked only while that
+  // circle is hovered, so the two never show at once.
+  const tooltip = document.getElementById('tooltip');
+  const TOOLTIP_OFFSET_PX = 14;
+  let hovered = null;
+
+  function placeTooltip(event) {
+    const { innerWidth, innerHeight } = window;
+    const { width, height } = tooltip.getBoundingClientRect();
+    // Flip to the other side of the pointer near the right or bottom edge.
+    const x = event.clientX + TOOLTIP_OFFSET_PX + width > innerWidth
+      ? event.clientX - TOOLTIP_OFFSET_PX - width
+      : event.clientX + TOOLTIP_OFFSET_PX;
+    const y = event.clientY + TOOLTIP_OFFSET_PX + height > innerHeight
+      ? event.clientY - TOOLTIP_OFFSET_PX - height
+      : event.clientY + TOOLTIP_OFFSET_PX;
+    tooltip.style.left = `${Math.max(0, x)}px`;
+    tooltip.style.top = `${Math.max(0, y)}px`;
+  }
+
+  circles
+    .on('pointerenter', function (event, d) {
+      hovered = this;
+      this.querySelector('title').textContent = '';
+      tooltip.textContent = tooltipText(d);
+      tooltip.hidden = false;
+      placeTooltip(event);
+    })
+    .on('pointermove', placeTooltip)
+    .on('pointerleave', function (event, d) {
+      hovered = null;
+      this.querySelector('title').textContent = tooltipText(d);
+      tooltip.hidden = true;
+    });
+
   // Big circles first, so small stations stay on top and can be hovered.
   function sortBySize() {
     circles.sort((a, b) => d3.descending(a.totalTraffic, b.totalTraffic));
@@ -178,7 +216,14 @@ map.on('load', async () => {
       .attr('r', (d) => radiusScale(d.totalTraffic))
       .style('--departure-ratio', departureRatio)
       .select('title')
-      .text(tooltipText);
+      .text((d) => tooltipText(d));
+
+    // Keep an open tooltip in step when the time changes under the pointer.
+    if (hovered) {
+      const d = d3.select(hovered).datum();
+      hovered.querySelector('title').textContent = '';
+      tooltip.textContent = tooltipText(d);
+    }
 
     sortBySize();
   }

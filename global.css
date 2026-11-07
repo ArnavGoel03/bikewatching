@@ -9,6 +9,9 @@
   --color-arrivals: darkorange;
   --color-station-stroke: white;
   --radius-map: 8px;
+  --radius-tooltip: 5px;
+  --color-tooltip-bg: var(--color-text);
+  --color-tooltip-text: white;
   --space-1: 0.25em;
   --space-2: 0.5em;
   --space-3: 1em;

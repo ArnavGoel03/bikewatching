@@ -115,3 +115,21 @@ header em {
   background: var(--color);
   opacity: 0.8;
 }
+
+/* Step 4.4, on-page tooltip; map.js positions it beside the pointer. */
+#tooltip {
+  position: fixed;
+  z-index: 10;
+  pointer-events: none;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-tooltip);
+  background: var(--color-tooltip-bg);
+  color: var(--color-tooltip-text);
+  font-size: 0.875em;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 20%);
+}
+
+#tooltip[hidden] {
+  display: none;
+}

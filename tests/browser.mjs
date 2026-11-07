@@ -117,6 +117,32 @@ try {
   const hit = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.tagName, target);
   check('circles receive pointer events', hit === 'circle', hit);
 
+  // Real hover: the on-page tooltip shows at once with the station's numbers,
+  // the native <title> is blanked meanwhile, and both reset on leave.
+  await page.mouse.move(target.x, target.y);
+  await page.waitForTimeout(100);
+  const shown = await page.evaluate(() => {
+    const t = document.getElementById('tooltip');
+    const r = t.getBoundingClientRect();
+    return { hidden: t.hidden, text: t.textContent, inView: r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight };
+  });
+  check('tooltip appears on hover with the station numbers', !shown.hidden && shown.text === target.title, shown.text);
+  check('tooltip stays inside the viewport', shown.inView);
+  await page.screenshot({ path: join(OUT, 'desktop-hover.png'), clip: { x: Math.max(0, target.x - 200), y: Math.max(0, target.y - 120), width: 480, height: 240 } });
+  const blanked = await page.$$eval('#map svg circle title', (ts) => ts.filter((t) => t.textContent === '').length);
+  check('native title blanked only for the hovered circle', blanked === 1, String(blanked));
+  await setSlider(page, 480);
+  const live = await page.evaluate(() => document.getElementById('tooltip').textContent);
+  check('open tooltip follows the slider', live !== target.title && /^\d+ trips/.test(live), live);
+  await setSlider(page, -1);
+  await page.mouse.move(5, 5);
+  await page.waitForTimeout(100);
+  const left = await page.evaluate(() => ({
+    hidden: document.getElementById('tooltip').hidden,
+    blank: [...document.querySelectorAll('#map svg circle title')].filter((t) => t.textContent === '').length,
+  }));
+  check('tooltip hides and titles restore on leave', left.hidden && left.blank === 0, JSON.stringify(left));
+
   // Pan: circles must follow the map.
   // Start the drag on bare map: a drag that starts on a circle goes to the SVG.
   const start = await page.evaluate(() => {
