@@ -1,7 +1,10 @@
-# Publishes the site to GitHub Pages. The Mapbox token lives only in the
-# MAPBOX_TOKEN repository secret and is substituted into map.js here, so it
-# never enters git history. Only the files the page needs are published.
-# Actions are pinned to commit SHAs because this job holds the token secret.
+# Publishes the site to GitHub Pages, gated by tests and checked live after.
+# 1. test:   syntax check and logic tests; a failure stops the deploy.
+# 2. deploy: the Mapbox token lives only in the MAPBOX_TOKEN repository secret
+#            and is substituted into map.js here, so it never enters git
+#            history. Only the files the page needs are published.
+# 3. live:   the browser suite runs against the published site.
+# Actions are pinned to commit SHAs because the deploy job holds the token.
 name: Deploy to Pages
 
 on:
@@ -11,16 +14,30 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  test:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+      - run: corepack enable && pnpm install --frozen-lockfile
+      - run: pnpm run check
+      - run: pnpm test
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -50,3 +67,18 @@ jobs:
           path: _site
       - id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+
+  live:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+      - run: corepack enable && pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps --only-shell chromium
+      - name: Browser suite against the published site
+        env:
+          BASE_URL: https://arnavgoel03.github.io/bikewatching/
+        run: pnpm test:browser
