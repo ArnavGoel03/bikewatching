@@ -34,11 +34,14 @@ const MAP_OPTIONS = {
   maxZoom: 18,
 };
 
+// The bike-lane GeoJSON is served from this site: the Boston link goes
+// through a slow ArcGIS redirect chain that drew its lanes seconds after the
+// rest of the map. Unchanged copies (minified), downloaded 2026-11-07 from:
+//   Boston:    https://bostonopendata-boston.opendata.arcgis.com/datasets/boston::existing-bike-network-2022.geojson
+//   Cambridge: https://raw.githubusercontent.com/cambridgegis/cambridgegis_data/main/Recreation/Bike_Facilities/RECREATION_BikeFacilities.geojson
 const DATA_URLS = {
-  bostonLanes:
-    'https://bostonopendata-boston.opendata.arcgis.com/datasets/boston::existing-bike-network-2022.geojson',
-  cambridgeLanes:
-    'https://raw.githubusercontent.com/cambridgegis/cambridgegis_data/main/Recreation/Bike_Facilities/RECREATION_BikeFacilities.geojson',
+  bostonLanes: 'data/boston-bike-network-2022.geojson',
+  cambridgeLanes: 'data/cambridge-bike-facilities.geojson',
   stations: 'https://dsc106.com/labs/lab07/data/bluebikes-stations.json',
   trips: 'https://dsc106.com/labs/lab07/data/bluebikes-traffic-2024-03.csv',
 };

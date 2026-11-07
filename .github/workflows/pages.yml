@@ -36,7 +36,7 @@ jobs:
             exit 1
           fi
           mkdir _site
-          cp -R index.html global.css map.css map.js traffic.js assets _site/
+          cp -R index.html global.css map.css map.js traffic.js assets data _site/
           sed -i "s|__MAPBOX_TOKEN__|${MAPBOX_TOKEN}|" _site/map.js
           if grep -q "__MAPBOX_TOKEN__" _site/map.js; then
             echo "token placeholder was not replaced" >&2

@@ -13,7 +13,7 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const OUT = join(ROOT, 'test-results');
 const STATION_COUNT = 453;
 const LOAD_TIMEOUT_MS = 60_000;
-const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml' };
+const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.geojson': 'application/geo+json' };
 
 // The committed map.js holds a placeholder; locally the token comes from
 // MAPBOX_TOKEN or ~/.mapbox.key, the same file `save-key mapbox` writes.
@@ -90,12 +90,13 @@ try {
 
   await page.goto(base, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('html[data-ready="true"]', { timeout: LOAD_TIMEOUT_MS });
-  await page.waitForTimeout(1500); // let the lane tiles paint
+  // Wait until lanes, tiles and labels have all arrived before judging the render.
+  await page.waitForLoadState('networkidle', { timeout: LOAD_TIMEOUT_MS });
 
   check('slider enabled once data loaded', await page.isEnabled('#time-slider'));
   check('favicon is the SVG bike', (await page.getAttribute('link[rel=icon]', 'href')) === 'assets/favicon.svg');
   check('map canvas rendered', (await page.locator('#map canvas.mapboxgl-canvas').count()) === 1);
-  check('both bike-lane datasets fetched OK', laneResponses.filter((s) => s === 200).length >= 2, laneResponses.join(','));
+  check('both bike-lane datasets fetched OK', laneResponses.length === 2 && laneResponses.every((s) => s === 200), laneResponses.join(','));
 
   let circles = await circleState(page);
   check('one circle per station', circles.length === STATION_COUNT, String(circles.length));
