@@ -203,6 +203,20 @@ try {
 
   check('no page or console errors', errors.length === 0, errors.join(' | '));
 
+  // A transient failure of the course server is retried: the first trips
+  // request returns 503 and the map must still fill with the right numbers.
+  const flaky = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  let tripRequests = 0;
+  await flaky.route('**/bluebikes-traffic-2024-03.csv', (route) => {
+    tripRequests += 1;
+    return tripRequests === 1 ? route.fulfill({ status: 503, body: 'unavailable' }) : route.continue();
+  });
+  await flaky.goto(base, { waitUntil: 'domcontentloaded' });
+  await flaky.waitForSelector('html[data-ready="true"]', { timeout: LOAD_TIMEOUT_MS });
+  const flakyBusiest = await flaky.$eval('#map svg circle title', (t) => t.textContent);
+  check('a 503 on the trips file is retried', tripRequests === 2 && flakyBusiest === '11174 trips (5614 departures, 5560 arrivals)', `${tripRequests} requests, ${flakyBusiest}`);
+  await flaky.close();
+
   // Phone width: no horizontal scroll, map still visible.
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(500);

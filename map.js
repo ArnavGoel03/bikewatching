@@ -68,6 +68,36 @@ const departuresByMinute = createMinuteBuckets();
 const arrivalsByMinute = createMinuteBuckets();
 const tripBuckets = { departuresByMinute, arrivalsByMinute };
 
+// The station and trip files come from the course server. A transient error
+// (a 503, a dropped connection) is retried with a growing pause before the
+// load is given up, so one bad response does not leave the map empty.
+const DATA_LOAD_ATTEMPTS = 3;
+const DATA_RETRY_BASE_MS = 1500;
+
+async function withRetry(load, label) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await load();
+    } catch (error) {
+      if (attempt >= DATA_LOAD_ATTEMPTS) throw error;
+      console.warn(`Retrying ${label} (attempt ${attempt + 1} of ${DATA_LOAD_ATTEMPTS}):`, error);
+      await new Promise((resolve) => setTimeout(resolve, DATA_RETRY_BASE_MS * attempt));
+    }
+  }
+}
+
+// Trips are bucketed while parsing, so every attempt starts from empty buckets;
+// a retry after a partial parse can never double count.
+function loadTrips() {
+  for (const bucket of [...departuresByMinute, ...arrivalsByMinute]) bucket.length = 0;
+  return d3.csv(DATA_URLS.trips, (trip) => {
+    trip.started_at = parseTripTime(trip.started_at);
+    trip.ended_at = parseTripTime(trip.ended_at);
+    bucketTrip(trip, departuresByMinute, arrivalsByMinute);
+    return trip;
+  });
+}
+
 mapboxgl.accessToken = MAPBOX_TOKEN;
 const map = new mapboxgl.Map(MAP_OPTIONS);
 map.addControl(new mapboxgl.NavigationControl({ showCompass: false }));
@@ -104,13 +134,8 @@ map.on('load', async () => {
   let trips;
   try {
     [jsonData, trips] = await Promise.all([
-      d3.json(DATA_URLS.stations),
-      d3.csv(DATA_URLS.trips, (trip) => {
-        trip.started_at = parseTripTime(trip.started_at);
-        trip.ended_at = parseTripTime(trip.ended_at);
-        bucketTrip(trip, departuresByMinute, arrivalsByMinute);
-        return trip;
-      }),
+      withRetry(() => d3.json(DATA_URLS.stations), 'stations'),
+      withRetry(loadTrips, 'trips'),
     ]);
   } catch (error) {
     console.error('Error loading Bluebikes data:', error);
