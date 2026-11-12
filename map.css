@@ -149,6 +149,10 @@ header em {
   box-shadow: 0 2px 6px rgb(0 0 0 / 20%);
 }
 
+.tooltip-name {
+  display: block;
+}
+
 #tooltip[hidden] {
   display: none;
 }

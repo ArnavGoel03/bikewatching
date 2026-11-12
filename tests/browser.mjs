@@ -125,15 +125,16 @@ try {
   const shown = await page.evaluate(() => {
     const t = document.getElementById('tooltip');
     const r = t.getBoundingClientRect();
-    return { hidden: t.hidden, text: t.textContent, inView: r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight };
+    return { hidden: t.hidden, text: t.querySelector('.tooltip-trips').textContent, name: t.querySelector('.tooltip-name').textContent, inView: r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight };
   });
   check('tooltip appears on hover with the station numbers', !shown.hidden && shown.text === target.title, shown.text);
   check('tooltip stays inside the viewport', shown.inView);
+  check('tooltip names the hovered station', shown.name.trim().length > 0, shown.name);
   await page.screenshot({ path: join(OUT, 'desktop-hover.png'), clip: { x: Math.max(0, target.x - 200), y: Math.max(0, target.y - 120), width: 480, height: 240 } });
   const blanked = await page.$$eval('#map svg circle title', (ts) => ts.filter((t) => t.textContent === '').length);
   check('native title blanked only for the hovered circle', blanked === 1, String(blanked));
   await setSlider(page, 480);
-  const live = await page.evaluate(() => document.getElementById('tooltip').textContent);
+  const live = await page.evaluate(() => document.querySelector('#tooltip .tooltip-trips').textContent);
   check('open tooltip follows the slider', live !== target.title && /^\d+ trips/.test(live), live);
   await setSlider(page, -1);
   await page.mouse.move(5, 5);
@@ -152,14 +153,14 @@ try {
   const kb1 = await page.evaluate(() => ({
     tag: document.activeElement.tagName,
     title: document.activeElement.querySelector('title')?.textContent,
-    tip: document.getElementById('tooltip').hidden ? null : document.getElementById('tooltip').textContent,
+    tip: document.getElementById('tooltip').hidden ? null : document.querySelector('#tooltip .tooltip-trips').textContent,
     stops: document.querySelectorAll('#map svg circle[tabindex="0"]').length,
   }));
   check('Tab reaches the busiest station and shows its tooltip', kb1.tag === 'circle' && kb1.tip === kb1.title && kb1.title === '11174 trips (5614 departures, 5560 arrivals)' && kb1.stops === 1, JSON.stringify(kb1));
   await page.keyboard.press('ArrowRight');
   const kb2 = await page.evaluate(() => ({
     title: document.activeElement.querySelector('title')?.textContent,
-    tip: document.getElementById('tooltip').textContent,
+    tip: document.querySelector('#tooltip .tooltip-trips').textContent,
     stops: document.querySelectorAll('#map svg circle[tabindex="0"]').length,
     blank: [...document.querySelectorAll('#map svg circle title')].filter((t) => t.textContent === '').length,
   }));
@@ -293,7 +294,7 @@ try {
   });
   await touch.touchscreen.tap(spots.station.x, spots.station.y);
   await touch.waitForTimeout(200);
-  const tapped = await touch.evaluate(() => ({ hidden: document.getElementById('tooltip').hidden, text: document.getElementById('tooltip').textContent }));
+  const tapped = await touch.evaluate(() => ({ hidden: document.getElementById('tooltip').hidden, text: document.querySelector('#tooltip .tooltip-trips').textContent }));
   check('tap on a station shows its tooltip', !tapped.hidden && tapped.text === spots.station.title, JSON.stringify(tapped));
   await touch.touchscreen.tap(spots.bare.x, spots.bare.y);
   await touch.waitForTimeout(200);

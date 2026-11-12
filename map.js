@@ -226,6 +226,16 @@ async function setUpMap() {
   // lab's tooltip, and an accessible name); it is blanked only while that
   // circle is hovered, so the two never show at once.
   const tooltip = document.getElementById('tooltip');
+  const tooltipName = tooltip.querySelector('.tooltip-name');
+  const tooltipTrips = tooltip.querySelector('.tooltip-trips');
+
+  // The on-page tooltip adds the station's name above the lab's trip line, so
+  // a viewer can tell which station is under the pointer. The <title> keeps
+  // the lab's exact text.
+  function fillTooltip(station) {
+    tooltipName.textContent = station.name ?? '';
+    tooltipTrips.textContent = tooltipText(station);
+  }
   const TOOLTIP_OFFSET_PX = 14;
   let hovered = null;
   let lastPointer = null;
@@ -265,7 +275,7 @@ async function setUpMap() {
     // Set the <title> both ways: focusing a circle that is also under the
     // pointer must give it back its accessible name.
     circle.querySelector('title').textContent = blankTitle ? '' : tooltipText(d3.select(circle).datum());
-    tooltip.textContent = tooltipText(d3.select(circle).datum());
+    fillTooltip(d3.select(circle).datum());
     tooltip.hidden = false;
     placeTooltip(point);
   }
@@ -386,7 +396,7 @@ async function setUpMap() {
     // Keep an open tooltip in step when the time changes under the pointer.
     if (hovered) {
       if (titleBlanked) hovered.querySelector('title').textContent = '';
-      tooltip.textContent = tooltipText(d3.select(hovered).datum());
+      fillTooltip(d3.select(hovered).datum());
       // New text can change the box size, so re-place it at the pointer.
       if (lastPointer) placeTooltip(lastPointer);
     }
